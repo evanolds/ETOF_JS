@@ -22,9 +22,6 @@
 //
 // Declared classes (constructor functions) in this file:
 // ETO_Result
-// ETO_InvertibleCmd
-// ETO_InvertibleCmds
-// ETO_SetPropertyCmd
 // ETO_TextSelection
 
 // ----------------------------------------------------------
@@ -51,62 +48,6 @@ function ETO_Result(success, message, operationName)
     if (typeof operationName != "undefined")
         Object.defineProperty(this, "op", {"enumerable": true, "value": operationName});
 }
-
-// ----------------------------------------------------------
-
-// ETO_InvertibleCmd is a constructor function for an invertible command object. It is meant to serve only
-// as an abstract base class and has no default functionality. All inheriting classes must implement the
-// 'exec()' function.
-function ETO_InvertibleCmd() { }
-
-ETO_InvertibleCmd.prototype.exec = function()
-{
-    throw new Error(
-        "ETO_InvertibleCmd is an abstract base class and logs throws error when " +
-        "the 'exec' function has not been properly overridden by the inheriting class.");
-}
-
-// ----------------------------------------------------------
-
-// Constructor function for an invertible command that represents a collection of invertible commands.
-function ETO_InvertibleCmds(cmdArr)
-{
-    this.exec = function()
-    {
-        var inverseArr = new Array(cmdArr.length);
-        for (var i = 0; i < cmdArr.length; i++)
-        {
-            inverseArr[cmdArr.length - i - 1] = cmdArr[i].exec();
-        }
-        return new ETO_InvertibleCmds(inverseArr);
-    };
-    Object.freeze(this);
-}
-
-// Inherit from ETO_InvertibleCmd
-ETO_InvertibleCmds.prototype = Object.create(ETO_InvertibleCmd.prototype);
-
-// ----------------------------------------------------------
-
-// Constructor function for an invertible command that sets a property on an object to a value.
-function ETO_SetPropertyCmd(object, propertyName, value)
-{
-    this.exec = function()
-    {
-        // Make the inverse action that sets back to what it is now
-        var inverse = new ETO_SetPropertyCmd(object, propertyName, object[propertyName]);
-        
-        // Set the property
-        object[propertyName] = value;
-        
-        // Return inverse
-        return inverse;
-    };
-    Object.freeze(this);
-}
-
-// Inherit from ETO_InvertibleCmd
-ETO_SetPropertyCmd.prototype = Object.create(ETO_InvertibleCmd.prototype);
 
 // ----------------------------------------------------------
 
