@@ -90,7 +90,7 @@ function ETO_ArrayInsertCmd(array, item, insertionIndex)
     {
         // Insert the item, then return the inverse command
         array.splice(insertionIndex, 0, item);
-        return new ETO_ArrayRemoveCommand(array, insertionIndex);
+        return new ETO_ArrayRemoveCmd(array, insertionIndex);
     };
     Object.freeze(this);
 }
@@ -100,7 +100,7 @@ ETO_ArrayInsertCmd.prototype = Object.create(ETO_InvertibleCmd.prototype);
 
 // ----------------------------------------------------------
 
-function ETO_ArrayRemoveCommand(array, index)
+function ETO_ArrayRemoveCmd(array, index)
 {
     this.exec = function()
     {
@@ -117,6 +117,6 @@ function ETO_ArrayRemoveCommand(array, index)
 }
 
 // Inherit from ETO_InvertibleCmd
-ETO_ArrayRemoveCommand.prototype = Object.create(ETO_InvertibleCmd.prototype);
+ETO_ArrayRemoveCmd.prototype = Object.create(ETO_InvertibleCmd.prototype);
 
 // ----------------------------------------------------------
