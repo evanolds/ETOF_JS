@@ -16,6 +16,7 @@
 //   ETO_InvertibleCmd
 //   ETO_InvertibleCmds
 //   ETO_SetPropertyCmd
+//   ETO_SwapPropertyCmd
 //   ETO_ArrayInsertCmd
 //   ETO_ArrayRemoveCmd
 //
@@ -79,6 +80,28 @@ function ETO_SetPropertyCmd(object, propertyName, value)
 
 // Inherit from ETO_InvertibleCmd
 ETO_SetPropertyCmd.prototype = Object.create(ETO_InvertibleCmd.prototype);
+
+// ----------------------------------------------------------
+
+// Constructor function for an invertible command that swaps 2 
+// properties in an object.
+function ETO_SwapPropertiesCmd(object, propertyName1, propertyName2)
+{
+    this.exec = function()
+    {
+        // Swap
+        var temp = object[propertyName1];
+        object[propertyName1] = object[propertyName2];
+        object[propertyName2] = temp;
+        
+        // The inverse is this same object
+        return this;
+    };
+    Object.freeze(this);
+}
+
+// Inherit from ETO_InvertibleCmd
+ETO_SwapPropertiesCmd.prototype = Object.create(ETO_InvertibleCmd.prototype);
 
 // ----------------------------------------------------------
 
