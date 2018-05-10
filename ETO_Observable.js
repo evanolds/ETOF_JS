@@ -13,46 +13,60 @@
 
 // ----------------------------------------------------------
 
-// Constructor function for an observable object. This is an object that can have observable properties added.
-// When such properties are changed, change observers are notified.
-// An optional argument can be passed to serve one of two purpose:
-// 1. If 'param' is a function, then it will be used as a toString override (deprecated)
-// 2. If 'param' is an array, then it will be assumed that it's from a JSON serialized observable object, and 
-//    will used to reconstruct the object. See the 'toJSON' function for information about the descriptor 
-//    objects in serialized arrays.
-function ETO_Observable(param)
+// ETO_Observable(objectToCopy, simpleSerialize)
+//
+// Constructor function for an observable object. This is an object that can have observable properties 
+// added. When such properties are changed, change observers are notified.
+//
+// Function parameters:
+//
+// "objectToCopy":
+//   Object to copy to construct this instance. Ignored if not a non-null object.
+//   One special case is when this object has the 'ETO_Observable_SerializedData' member, 
+//   which indicates advanced serialization that preserves properties of properties. Otherwise all 
+//   enumerable properties are copied and added to this object as configurable, writable, and 
+//   enumerable properties.
+//
+// "simpleSerialize":
+//   Defaults to true if omitted.
+//   Boolean value indicating whether simple serialization is used in the toJSON function for this object. 
+//   When true, the object itself is returned in toJSON, and the object serializes in the same way 
+//   other objects do. When false, this object's toJSON function returns an object with a single 
+//   member: ETO_Observable_SerializedData.
+function ETO_Observable(objectToCopy, simpleSerialize)
 {
     // Initialize list of observers
-    var m_observersProps = {
-    	enumerable: false,
-    	configurable: false,
-    	writable: false,
-    	value: new Array()
-    };
-    Object.defineProperty(this, "m_observers", m_observersProps);
-    
-    if (param instanceof Function)
-    {
-        var m_memberProps = {
-        	enumerable: false,
-        	configurable: false,
-        	writable: false,
-        	value: param
-        };
-        Object.defineProperty(this, "m_toString", m_memberProps);
-    }
-    else if (param instanceof Array)
-    {
-    	// Add an observable property for each item in the array
-    	for (var i = 0; i < param.length; i++)
-    	{
-    		// If 'varType' is not a member, then it's not a valid descriptor
-    		var desc = param[i];
-    		if (desc.varType === undefined) { continue; }
+    Object.defineProperty(this, "m_observers", { "value": [] });
 
-    		this.addDeserializedProperty(desc);
-    	}
+    // 'objectToCopy' is optional and ignored if not a non-null object
+    if (objectToCopy !== null && typeof objectToCopy === "object")
+    {
+	    // Check the argument for the special case serialized data
+	    if ("ETO_Observable_SerializedData" in objectToCopy)
+	    {
+	    	var param = objectToCopy.ETO_Observable_SerializedData;
+
+	    	// Add an observable property for each item in the array
+	    	for (var i = 0; i < param.length; i++)
+	    	{
+	    		// If 'varType' is not a member, then it's not a valid descriptor
+	    		var desc = param[i];
+	    		if (desc.varType === undefined) { continue; }
+
+	    		this.addDeserializedProperty(desc);
+	    	}
+	    }
+	    else
+	    {
+	    	// Copy enumerable properties
+	    	for (var name in objectToCopy)
+	    		this.addProperty(name, objectToCopy[name], true, true, true);
+	    }
     }
+
+    if (typeof simpleSerialize === "undefined")
+    	simpleSerialize = true;
+    Object.defineProperty(this, "m_simpleSerialize", { "value": simpleSerialize });
 }
 
 // Adds an observer function that will be called when a property within this object changes value. The 
@@ -132,19 +146,28 @@ ETO_Observable.prototype.addDeserializedProperty = function(propDesc)
 	    propDesc.enumerable);
 }
 
+// addProperty(propertyName, propertyValue, removable, writable, isEnumerable)
+//
 // Adds a new property to this object. If the property name is null or a property with the specified
 // name already exists in this object, then no change is made and false is returned. Parameters:
-// "propertyName":
-//   (required)
+// "propertyName" (required):
 //   A string for the name of the property to add. Cannot be null, undefined, or the reserved string 
 //   "ETO_Observable_Properties".
 //
-// 2. propertyValue (required) - the initial value of the property
-// 3. removable (optional, defaults to true if omitted) - whether or not the property can be removed
-//    from the object
-// 4. writable (optional, defaults to true if omitted) - whether or not the property can be written to
-// 5. isEnumerable (optional, defaults to true) - whether or not the property is enumerable
-// On success, the property is added as an enumerable property and true is returned.
+// "propertyValue" (required):
+//   The initial value of the property
+//
+// "removable" (optional, defaults to true if omitted):
+//   Boolean value indicating whether or not the property can be removed from the object
+//
+// "writable" (optional, defaults to true if omitted):
+//   Boolean value indicating whether or not the property can be written to
+//
+// "isEnumerable" (optional, defaults to true):
+//   Boolean value indicating whether or not the property is enumerable
+//
+// On success, the property is added as an enumerable property and true is returned. On failure, 
+// the property is not added and false is returned.
 ETO_Observable.prototype.addProperty = function(propertyName, propertyValue, removable, writable, isEnumerable)
 {
     // Reject special-case property names
@@ -269,6 +292,8 @@ ETO_Observable.prototype.addPropertyWithPrivateSet = function(
     return setFunc;
 }
 
+// addPropertyWithSetFilter(propertyName, propertyValue, setFilterFunc, removable, isEnumerable)
+//
 // Adds a new property to this object, that has a filter on values that can be set. The provided 
 // function is called when an assignment to the property occurs, passing the potential new
 // property value as the first parameter, and the existing property value as the second
@@ -277,22 +302,22 @@ ETO_Observable.prototype.addPropertyWithPrivateSet = function(
 // When calling this function, if the property name is null or a property with the specified name
 // already exists in this object, then no change is made and false is returned. Parameters:
 //
-// "propertyName": (required)
-// A string for the name of the property to add. Cannot be null, undefined, or the reserved string 
-// "ETO_Observable_Properties".
+// "propertyName" (required):
+//   A string for the name of the property to add. Cannot be null, undefined, or the reserved string 
+//   "ETO_Observable_Properties".
 //
-// "propertyValue": (required)
-// The initial value of the property
+// "propertyValue" (required):
+//   The initial value of the property
 //
-// "setPredicate": (required)
-// A predicate function that takes a single paramater P and returns true if the value of P can be 
-// set as the value of this property, and false if it cannot. 
+// "setPredicate" (required):
+//   A predicate function that takes a single paramater P and returns true if the value of P 
+//   can be set as the value of this property, and false if it cannot. 
 //
-// "removable": (optional, defaults to true if omitted)
-// Whether or not the property can be removed from the object
+// "removable" (optional, defaults to true if omitted):
+//   Whether or not the property can be removed from the object
 //
-// "isEnumerable": (optional, defaults to true)
-// Whether or not the property is enumerable
+// "isEnumerable" (optional, defaults to true):
+//   Whether or not the property is enumerable
 //
 // On success, the property is added as an enumerable property and true is returned.
 ETO_Observable.prototype.addPropertyWithSetFilter = function(propertyName, propertyValue, setFilterFunc,
@@ -348,6 +373,7 @@ ETO_Observable.prototype.addPropertyWithSetFilter = function(propertyName, prope
 }
 
 // addROProperty(propertyName, propertyValue, isEnumerable)
+//
 // Adds a read-only property that cannot be removed or written to.
 ETO_Observable.prototype.addROProperty = function(propertyName, propertyValue, isEnumerable)
 {
@@ -432,23 +458,25 @@ ETO_Observable.prototype.removeProperty = function(propertyName)
     return true;
 }
 
+ETO_Observable.prototype.seal = function()
+{
+	Object.seal(this);
+}
+
 // Provides default serialization for ETO_Observable objects. Only serializes enumerable properties.
 ETO_Observable.prototype.toJSON = function()
 {
-	// ETO_Observable objects are serialized into an array of objects, each of which is a property 
+	if (this.m_simpleSerialize)
+		return this;
+
+	// ETO_Observable objects are serialized into an object with 1 member: ETO_Observable_SerializedData.
+	// The ETO_Observable_SerializedData property is an array of objects, each of which is a property 
 	// descriptor with the following members: name, value, enumerable, writable, configurable, varType
 	var arr = new Array();
 
-	// Get all of our own property names
-	//var names = Object.getOwnPropertyNames(this);
-	// For each one, add the descriptor to the array
-	//for (var i = 0; i < names.length; i++)
-
-	// Iterate through iterable properties only
+	// Iterate through enumerable properties only
 	for (var name in this)
 	{
-		//var name = names[i];
-
 		// A few exceptions
 		if (name == "m_observers" || name == "m_toString") { continue; }
 
@@ -491,15 +519,11 @@ ETO_Observable.prototype.toJSON = function()
 		arr.push(details);
 	}
 
-	return arr;
+	return { "ETO_Observable_SerializedData": arr};
 }
 
 ETO_Observable.prototype.toString = function()
 {
-    if (this.m_toString)
-    {
-        return this.m_toString();
-    }
     return "[object ETO_Observable]";
 }
 
@@ -683,6 +707,11 @@ ETO_ObservableList.prototype.clear = function()
 
 ETO_ObservableList.prototype.filter = function(predicate, predicateThis)
 {
+	// Set the default if predicateThis is undefined
+	if (typeof predicateThis === "undefined")
+		predicateThis = this;
+
+	// Initialize a new list and add all predicate-satisfying items
     var result = new ETO_ObservableList();
     for (var i = 0; i < this.m_storage.length; i++)
     {
@@ -804,6 +833,18 @@ ETO_ObservableList.prototype.makeIndexProperty = function(index)
         "get": function() { return storage[index][0]; },
         "set": function(newItem)
         {
+        	// Get the existing item
+	    	var item = this.m_storage[index];
+
+	    	// One special case for the exact same item
+	    	if (item[0] === newItem)
+	    		return;
+
+	    	// If the existing item is an ETO_Observable object, the change 
+            // observer must be removed.
+            if (item[1])
+		    	item[0].removeChangeObserver(item[1]);
+        	
             // What's happening is a replacement of the form: theList[x] = y
             // This means the "x" property of the list is changing, so the change
             // details are constructed accordingly.
@@ -812,11 +853,25 @@ ETO_ObservableList.prototype.makeIndexProperty = function(index)
                 "object": owningList,
                 "listChangeType": "replace",
                 "index": index,
-                "oldValue": storage[index][0]
+                "oldValue": item[0]
             };
             
-            // Set the item, then notify
+            // Set the item and add an observer if necessary
             storage[index][0] = newItem;
+            if (newItem instanceof ETO_Observable)
+            {
+		        var itemChangeCallback = function(info)
+		        {
+		            info.listItem = newItem;
+		            info.index = index;
+		            owningList.notifyObservers(info);
+		        };
+            	storage[index][1] = newItem.addChangeObserver(itemChangeCallback, this);
+            }
+            else
+            	storage[index][1] = null;
+
+            // Notify of the change
             owningList.notifyObservers(changeDetails);
         }
     };
@@ -931,6 +986,19 @@ ETO_ObservableList.prototype.remove = function(startIndex, count)
     }
 
     return removed.length;
+}
+
+ETO_ObservableList.prototype.removeChangeObserver = function(observerHandle)
+{
+    for (var i = 0; i < this.m_observers.length; i++)
+    {
+        if (this.m_observers[i] == observerHandle)
+        {
+            this.m_observers.splice(i, 1);
+            return true;
+        }
+    }
+    return false;
 }
 
 ETO_ObservableList.prototype.removeLast = function()
