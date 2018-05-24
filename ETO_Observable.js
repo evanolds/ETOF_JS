@@ -1,15 +1,18 @@
 // Author:
-// Evan Thomas Olds
+//   Evan Thomas Olds
+//
+// References:
+//   https://developer.mozilla.org/
 //
 // File Dependencies:
-// (none)
+//   (none)
 //
 // Technology Dependencies:
-// ES 5.1 or later
+//   ES 5.1 or later
 //
 // Declared classes (constructor functions) in this file:
-// ETO_Observable
-// ETO_ObservableList
+//   ETO_Observable
+//   ETO_ObservableList
 
 // ----------------------------------------------------------
 
@@ -540,6 +543,9 @@ ETO_Observable.prototype.toString = function()
 //   otherwise the addition of the item to the list will be rejected.
 //   If a additional validation function is not provided, then any item will be allowed to be added to 
 //   the list.
+//
+// "objectToCopy" (Array or ETO_ObservableList):
+//   Object to copy contents from.
 function ETO_ObservableList(options)
 {
     // Define the "private" (non-enumerable) storage array that stores each item as a tuple of the form:
@@ -566,6 +572,13 @@ function ETO_ObservableList(options)
     if (options && options.addValidator instanceof Function)
     {
     	Object.defineProperty(this, "m_addValidator", { "value": options.addValidator });
+    }
+
+    // If the options contain an object to copy that has a "length" member, then copy
+    if (options && options.objectToCopy && "length" in options.objectToCopy)
+    {
+    	for (var i = 0; i < options.objectToCopy.length; i++)
+    	    this.add(options.objectToCopy[i]);
     }
 }
 
@@ -705,6 +718,23 @@ ETO_ObservableList.prototype.clear = function()
     this.remove(0, this.length);
 }
 
+// every(callback[, thisArg])
+//
+// Returns true if every element in the list satisfies the callback predicate, false otherwise.
+ETO_ObservableList.prototype.every = function(callback, thisArg)
+{
+	if (!thisArg) { thisArg = this; }
+
+	for (var i = 0; i < this.m_storage.length; i++)
+    {
+        if (!callback.call(thisArg, this.m_storage[i][0], i, this))
+            return false;
+    }
+
+    // Arriving here implies that every item satisfied the predicate
+    return true;
+}
+
 ETO_ObservableList.prototype.filter = function(predicate, predicateThis)
 {
 	// Set the default if predicateThis is undefined
@@ -745,12 +775,12 @@ ETO_ObservableList.prototype.first = function(predicate, startIndex)
         }
         return null;
     };
-    this.forEach(callback, startIndex, this);
+    this.forEach(callback, this, startIndex);
     
     return item;
 }
 
-// forEach(callback[, startIndex, optionalThis])
+// forEach(callback[, thisArg, startIndex])
 //
 // Function that goes through all items in the the list, in order, invoking the callback function for
 // each one. The callback function is invoked with the following parameters:
@@ -760,18 +790,18 @@ ETO_ObservableList.prototype.first = function(predicate, startIndex)
 // 4. terminationToken - reference to a termination token object. If the callback function returns
 //    this token, then the forEach loop will be terminated. All other return values from the callback
 //    function are ignored.
-ETO_ObservableList.prototype.forEach = function(callback, startIndex, optionalThis)
+ETO_ObservableList.prototype.forEach = function(callback, thisArg, startIndex)
 {
     var stride = 1;
     var terminationToken = new Object();
     
     // Initialize defaults for optional parameters, if need be
     if (startIndex === undefined) { startIndex = 0; }
-    if (optionalThis === undefined) { optionalThis = this; }
+    if (!thisArg) { thisArg = this; }
     
     for (var i = startIndex; i < this.m_storage.length && i >= 0; i += stride)
     {
-        if (callback.call(optionalThis, this.m_storage[i][0], i, this, terminationToken) === terminationToken)
+        if (callback.call(thisArg, this.m_storage[i][0], i, this, terminationToken) === terminationToken)
             break;
     }
 }
@@ -791,7 +821,7 @@ ETO_ObservableList.prototype.indexOf = function(item, startIndex)
         }
         return null;
     };
-    this.forEach(storeFirstIndex, startIndex);
+    this.forEach(storeFirstIndex, this, startIndex);
     return result;
 }
 
@@ -808,7 +838,7 @@ ETO_ObservableList.prototype.last = function(predicate, startIndex)
         }
         return null;
     };
-    this.forEach(callback, startIndex, this);
+    this.forEach(callback, this, startIndex);
     
     return item;
 }
@@ -1012,21 +1042,54 @@ ETO_ObservableList.prototype.removeLast = function()
     return this.remove(this.m_storage.length - 1) == 1;
 }
 
-// WARNING: Function is a work in progress and currently only supports calling with 1 paramater 
-// to delete all items from the starting index to the end. Long-term goal is to have functionality 
-// equivalent (to the greatest extent possible) to the array splice function.
-ETO_ObservableList.prototype.splice = function(startIndex, doNotUse)
+// splice(startIndex[, deleteCount])
+//
+// Parameter specification copied directly from MDN's array.splice documentation on May 11, 2018:
+//
+// "startIndex":
+//   Index at which to start changing the array (with origin 0). If greater than the length of 
+//   the array, actual starting index will be set to the length of the array. If negative, will 
+//   begin that many elements from the end of the array (with origin -1) and will be set to 0 if 
+//   absolute value is greater than the length of the array.
+//
+// "deleteCount":
+//   An integer indicating the number of old array elements to remove.
+//   If deleteCount is omitted, or if its value is larger than array.length - start (that is, if 
+//   it is greater than the number of elements left in the array, starting at start), then all of 
+//   the elements from start through the end of the array will be deleted.
+//   If deleteCount is 0 or negative, no elements are removed. In this case, you should specify 
+//   at least one new element (see below).
+//
+// "item1", "item2", ... (optional):
+//   The elements to add to the array, beginning at the start index. If you don't specify any 
+//   elements, splice() will only remove elements from the array.
+ETO_ObservableList.prototype.splice = function(startIndex, deleteCount)
 {
-    if (doNotUse === undefined)
+	if (startIndex > this.length)
+		startIndex = this.length;
+	else if (startIndex < -this.length)
+		startIndex = 0;
+	else if (startIndex < 0)
+		startIndex = this.length + startIndex;
+	
+    if (typeof deleteCount === "undefined" || deleteCount > this.length - startIndex)
+    	deleteCount = this.length - startIndex;
+
+    // Remove the items and return array of removed items
+    var removedItems = new Array();
+    for (var i = startIndex; i < this.m_storage.length; i++)
     {
-        var items = new Array();
-        for (var i = startIndex; i < this.m_storage.length; i++)
-        {
-        	items.push(this.m_storage[i][0]);
-        }
-        this.remove(startIndex, this.length - startIndex);
-        return items;
+    	removedItems.push(this.m_storage[i][0]);
     }
+    this.remove(startIndex, deleteCount);
+
+    // If more than 2 arguments exist, items need to be inserted
+    for (var i = 2; i < arguments.length; i++)
+    {
+    	this.add(arguments[i], startIndex + (i - 2));
+    }
+
+    return removedItems;
 }
 
 ETO_ObservableList.prototype.toArray = function()
@@ -1039,12 +1102,8 @@ ETO_ObservableList.prototype.toArray = function()
 
 ETO_ObservableList.prototype.toJSON = function()
 {
-	var toSerialize = new Array();
-	for (var i = 0; i < this.m_storage.length; i++)
-	{
-		toSerialize.push(this.m_storage[i][0]);
-	}
-    return toSerialize;
+	// An ETO_ObservableList serializes as an array
+	return this.toArray();
 }
 
 ETO_ObservableList.prototype.toString = function()
